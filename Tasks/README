@@ -1,0 +1,11 @@
+Python program using Psychopy package
+
+Learning Phase: cue + online rating + easy(1-back)/ hard(3-back) task
+
+True Choice Phase: choice + 1-back / 3-back task
+
+False Choice Phase: choice - 2-back task
+
+Offline Rating: "How much do you like this image?"
+Demand Rating: NASA-Task Load Index. (1) Mental Demand, (2) Effort, (3) Fatigue deimensions.
+Learning Check: "Which level of N-back task did this image predict?"
