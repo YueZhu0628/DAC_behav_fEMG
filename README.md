@@ -1,1 +1,4 @@
-The data set and analysis scripts.
+The scripts for computerized tasks.
+Data sets.
+Data analysis scripts.
+Questionnaires.
