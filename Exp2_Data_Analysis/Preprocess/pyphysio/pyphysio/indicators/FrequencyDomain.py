@@ -1,55 +1,10 @@
-# coding=utf-8
-from __future__ import division
-
-from ..BaseIndicator import Indicator as _Indicator
-from ..tools.Tools import PSD as PSD
 import numpy as _np
+from .._base_algorithm import _Algorithm
+from ..utils import PSD as PSD
 
-__author__ = 'AleB'
+# __author__ = 'AleB'
 
-
-class InBand(_Indicator):
-    """
-    Extract the PSD of a given frequency band
-    
-
-    Parameters
-    ----------
-    freq_min : float, >0
-        Left bound of the frequency band
-    freq_max : float, >0
-        Right bound of the frequency band
-    method : 'ar', 'welch' or 'fft'
-        Method to estimate the PSD
-        
-    Additional parameters
-    ---------------------
-    For the PSD (see pyphysio.tools.Tools.PSD), for instance:
-        
-    interp_freq : float, >0
-        Frequency used to (re-)interpolate the signal
-
-    Returns
-    -------
-    freq : numpy array
-        Frequencies in the frequency band
-    psd : float
-        Power Spectrum Density in the frequency band
-    """
-
-    def __init__(self, freq_min, freq_max, method, **kwargs):
-        _Indicator.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
-
-    @classmethod
-    def algorithm(cls, data, params):
-        freq, spec = PSD(**params)(data)
-        # freq is sorted so
-        i_min = _np.searchsorted(freq, params["freq_min"])
-        i_max = _np.searchsorted(freq, params["freq_max"])
-        return freq[i_min:i_max], spec[i_min:i_max]
-
-
-class PowerInBand(_Indicator):
+class PowerInBand(_Algorithm):
     """
     Estimate the power in given frequency band
 
@@ -76,15 +31,21 @@ class PowerInBand(_Indicator):
     """
 
     def __init__(self, freq_min, freq_max, method, **kwargs):
-        _Indicator.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
+        _Algorithm.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
+        self.dimensions = {'time' : 1}
 
-    @classmethod
-    def algorithm(cls, data, params):
-        freq, powers = InBand(**params)(data)
-        return _np.sum(powers)
+    def algorithm(self, signal):
+        params = self._params
+        fsamp = signal.p.get_sampling_freq()
+        psd = PSD(scaling='density', **params)(signal)
+        freq = psd.coords['freq'].values
+        power = psd.values
+        i_min = _np.searchsorted(freq, params["freq_min"])
+        i_max = _np.searchsorted(freq, params["freq_max"])
+        result = _np.sum(power[i_min:i_max]*fsamp, axis=0, keepdims=True)
+        return result
 
-
-class PeakInBand(_Indicator):
+class PeakInBand(_Algorithm):
     """
     Estimate the peak frequency in a given frequency band
 
@@ -111,10 +72,24 @@ class PeakInBand(_Indicator):
     """
 
     def __init__(self, freq_min, freq_max, method, **kwargs):
-        _Indicator.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
+        _Algorithm.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
+        self.dimensions = {'time' : 1}
     
-    @classmethod
-    def algorithm(cls, data, params):
-        freq, power = InBand(**params)(data)
-        return freq[_np.argmax(power)]
+    def algorithm(self, signal):
+        
+        params = self._params
+        
+        psd = PSD(**params)(signal)
+        
+        freq = psd.coords['freq'].values
+        power = psd.values.ravel()
+        
+        i_min = _np.searchsorted(freq, params["freq_min"])
+        i_max = _np.searchsorted(freq, params["freq_max"])
+        
+        f_band = freq[i_min:i_max]
+        p_band = power[i_min:i_max]
+        f_peak = f_band[_np.argmax(p_band)]
+        
+        return _np.array([f_peak])
 

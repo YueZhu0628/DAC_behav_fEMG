@@ -1,202 +1,205 @@
-# coding=utf-8
-from __future__ import division
-
 import numpy as _np
+from .._base_algorithm import _Algorithm
 
-from ..BaseIndicator import Indicator as _Indicator
-from ..tools.Tools import Diff as _Diff
-from ..Signal import EvenlySignal as _EvenlySignal, Signal as _Signal
+from ..utils import Diff as _Diff
 
-
-__author__ = 'AleB'
-
-
-class Mean(_Indicator):
+class Mean(_Algorithm):
     """
     Compute the arithmetic mean of the signal, ignoring any NaNs.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
+        
+    def algorithm(self, signal):
+        signal_values = signal.p.get_values()
+        result = _np.mean(signal_values, keepdims=True)
+        # print(result.shape)
+        return result
 
-    @classmethod
-    def algorithm(cls, data, params):
-        return _np.nanmean(data.get_values())
-
-
-class Min(_Indicator):
+class Min(_Algorithm):
     """
     Return minimum of the signal, ignoring any NaNs.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     @classmethod
-    def algorithm(cls, data, params):
-        return _np.nanmin(data.get_values())
+    def algorithm(cls, signal):
+        signal_values = signal.p.get_values()
+        return _np.min(signal_values, keepdims=True)
 
 
-class Max(_Indicator):
+class Max(_Algorithm):
     """
     Return maximum of the signal, ignoring any NaNs.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
-    @classmethod
-    def algorithm(cls, data, params):
-        return _np.nanmax(data.get_values())
+    def algorithm(self, signal):
+        signal_values = signal.p.get_values()
+        return _np.max(signal_values, keepdims=True)
 
 
-class Range(_Indicator):
+class Range(_Algorithm):
     """
     Compute the range of the signal, ignoring any NaNs.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
-    @classmethod
-    def algorithm(cls, data, params):
-        return Max()(data) - Min()(data)
+    def algorithm(self, signal):
+        return Max()(signal).values - Min()(signal).values
 
 
-class Median(_Indicator):
+class Median(_Algorithm):
     """
     Compute the median of the signal, ignoring any NaNs.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
-    @classmethod
-    def algorithm(cls, data, params):
-        return _np.median(data.get_values())
+    def algorithm(self, signal):
+        signal_values = signal.p.get_values()
+        return _np.median(signal_values, keepdims=True)
 
 
-class StDev(_Indicator):
+class StDev(_Algorithm):
     """
     Computes the standard deviation of the signal, ignoring any NaNs.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
-    @classmethod
-    def algorithm(cls, data, params):
-        return _np.nanstd(data.get_values())
+    def algorithm(self, signal):
+        signal_values = signal.p.get_values()
+        return _np.std(signal_values, keepdims=True)
 
 
-class Sum(_Indicator):
+class Sum(_Algorithm):
     """
     Computes the sum of the values in the signal, treating Not a Numbers (NaNs) as zero.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
-    @classmethod
-    def algorithm(cls, data, params):
-        return _np.nansum(data.get_values())
+    def algorithm(self, signal):
+        signal_values = signal.p.get_values()
+        return _np.sum(signal_values, keepdims=True)
 
 
-class AUC(_Indicator):
+class AUC(_Algorithm):
     """
     Computes the Area Under the Curve of the signal, treating Not a Numbers (NaNs) as zero.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
-    @classmethod
-    def algorithm(cls, signal, params):
-        if isinstance(signal, _Signal) and not isinstance(signal, _EvenlySignal):
-            cls.warn('Calculating Area Under the Curve of an Unevenly signal!')
-        fsamp = signal.get_sampling_freq()
-        return (1. / fsamp) * Sum()(signal)
+    def algorithm(self, signal):
+        fsamp = signal.p.get_sampling_freq()
+        return Sum()(signal).values*(1./fsamp)
     
-class DetrendedAUC(_Indicator):
+class DetrendedAUC(_Algorithm):
     """
     Computes the Area Under the Curve of the signal, treating Not a Numbers (NaNs) as zero.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
-    @classmethod
-    def algorithm(cls, signal, params):
-        if isinstance(signal, _Signal) and not isinstance(signal, _EvenlySignal):
-            cls.warn('Calculating Area Under the Curve of an Unevenly signal!')
-        fsamp = signal.get_sampling_freq()
+    def algorithm(self, signal):
+        fsamp = signal.p.get_sampling_freq()
+        
+        signal_values = signal.p.get_values()
         
         #detrend
-        t_signal = signal.get_times()
-        intercept = signal[0]
-        coeff = (signal[-1] - signal[0]) / signal.get_duration()
-        baseline = coeff*(t_signal - t_signal[0]) + intercept
+        idx = _np.arange(len(signal_values))[:, _np.newaxis, _np.newaxis]
+        intercept = signal_values[[0]]
+        coeff = (signal_values[[-1]] - signal_values[[0]]) / len(signal_values)
         
-        signal_ = signal - baseline
-        return (1. / fsamp) * Sum()(signal_)
+        baseline = intercept + coeff*idx
+        
+        signal_ = signal_values - baseline
+        
+        auc = (1. / fsamp) * _np.sum(signal_, keepdims=True)
+        return auc
 
 
-class RMSSD(_Indicator):
+class RMSSD(_Algorithm):
     """
     Compute the square root of the mean of the squared 1st order discrete differences.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
-    @classmethod
-    def algorithm(cls, signal, params):
-        diff = _Diff()(signal)
-        return _np.sqrt(_np.mean(_np.power(diff.get_values(), 2)))
+    def algorithm(self, signal):
+        
+        signal_values = signal.p.get_values()
+        diff = _np.diff(signal_values, axis=0)
+        return _np.sqrt(_np.mean(_np.power(diff, 2), keepdims=True))
 
-
-class SDSD(_Indicator):
+class SDSD(_Algorithm):
     """
     Calculate the standard deviation of the 1st order discrete differences.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
         diff = _Diff()(signal)
         return StDev()(diff)
 
+'''
+# I never really used these...
+
 # TODO: FIX Histogram missing
-class Triang(_Indicator):
+class Triang(_Algorithm):
     """
     Computes the HRV triangular index.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
+    def algorithm(self, signal):
         step = 1000. / 128
-        min_ibi = _np.min(data)
-        max_ibi = _np.max(data)
+        min_ibi = _np.min(signal)
+        max_ibi = _np.max(signal)
         if (max_ibi - min_ibi) / step + 1 < 10:
-            cls.warn("len(bins) < 10")
+            print("len(bins) < 10")
             return _np.nan
         else:
             bins = _np.arange(min_ibi, max_ibi, step)
-            h, b = Histogram(histogram_bins=bins)(data)
-            return len(data) / _np.max(h)
+            h, b = _np.histogram(signal, bins)
+            return len(signal) / _np.max(h)
 
 
-class TINN(_Indicator):
+class TINN(_Algorithm):
     """
     Computes the triangular interpolation of NN interval histogram.
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
+    def algorithm(self, signal):
         step = 1000. / 128
-        min_ibi = _np.min(data)
-        max_ibi = _np.max(data)
+        min_ibi = _np.min(signal)
+        max_ibi = _np.max(signal)
         if (max_ibi - min_ibi) / step + 1 < 10:
-            cls.warn("len(bins) < 10")
+            print("len(bins) < 10")
             return _np.nan
         else:
             bins = _np.arange(min_ibi, max_ibi, step)
-            h, b = Histogram(histogram_bins=bins)(data)
+            h, b = _np.histogram(signal, bins)
             max_h = _np.max(h)
             hist_left = _np.array(h[0:_np.argmax(h)])
             ll = len(hist_left)
@@ -229,3 +232,4 @@ class TINN(_Indicator):
 
             m = b[_np.argmax(h) + pos + 1]
             return m - n
+'''
