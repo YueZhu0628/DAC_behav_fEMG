@@ -1,0 +1,153 @@
+---
+title: "DARDDC_v2 Questionnaires Data Analysis R Notebook"
+output: html_notebook
+---
+
+```{r}
+rm(list = ls())
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+```
+
+
+# Combine participants' data files
+```{r combine files}
+main_path <- "E:/Dissertation/Methods/Exp2_Demand_Choice/DARDCpy_v2/data_move_here"
+participants_folders <- list.dirs(main_path, full.names = TRUE, recursive = FALSE)
+
+all_dataframes <- list()
+
+for (p_folder in participants_folders) {
+  pid <- basename(p_folder)
+  file_path <- file.path(p_folder, paste0(pid, "_survey.csv"))
+  if (file.exists(file_path)){
+    p_data <- read.csv(file_path, header = TRUE, nrows = 1)
+    all_dataframes[[pid]] <- p_data
+  }
+  else{
+    warning(paste("File not found. SONA ID:", pid))
+  }
+}
+
+combined_dataframe <- do.call(rbind, all_dataframes) %>% 
+  select(-c(success, trial_type, trial_index, time_elapsed, internal_node_id, subject))
+```
+
+
+```{r Rescore Items}
+rescore_items <- function(data, items){
+  data %>%
+    mutate(across(all_of(matches(items)), ~ recode(., "0" = 1, "1" = 2, "2" = 3, "3" = 4, "4" = 5)))
+}
+```
+
+```{r Reverse-score Items}
+reverse_score_items_bai <- function(data, items){
+  data %>%
+    mutate(across(all_of(matches(items)), ~ recode(., "1" = 4, "2" = 3, "3" = 2, "4" = 1)))
+}
+
+reverse_score_items_nfc <- function(data, items){
+  data %>%
+    mutate(across(all_of(matches(items)), ~ recode(., "1" = 5, "2" = 4, "3" = 3, "4" = 2, "5" = 1)))
+}
+
+reverse_score_items_bfi <- function(data, items){
+  data %>%
+    mutate(across(all_of(matches(items)), ~ recode(., "1" = 5, "2" = 4, "3" = 3, "4" = 2, "5" = 1)))
+}
+
+reverse_score_items_upps <- function(data, items){
+  data %>%
+    mutate(across(all_of(matches(items)), ~ recode(., "1" = 4, "2" = 3, "3" = 2, "4" = 1)))
+}
+```
+
+
+```{r}
+# All items
+all_items <- c("^.*[0-9]+") 
+
+# BIS_BAS
+bai_items <- c("^BAI.*")  # all BAI items
+bis_items <- c("^BAI.*bis$")  # BIS
+bas_d_items <- c("^BAI.*bas_d$") # BAS drive
+bas_fs_items <- c("^BAI.*bas_fs$") # BAS fun seeking
+bas_rr_items <- c("^BAI.*bas_rr$") # BAS reward responsiveness
+
+# NFC
+nfc_items <- c("^NFC[0-9]+")
+
+# BFI
+bfi_items <- c("BFI.*")  # all BFI items
+bfi_ext_items <- c("^BFI.*ext$")  # BFI Extraversion
+bfi_agr_items <- c("^BFI.*agr$")  # BFI Agreeableness
+bfi_con_items <- c("^BFI.*con$")  # BFI Conscientiousness
+bfi_neu_items <- c("^BFI.*neu$")  # BFI Neuroticism
+bfi_open_items <- c("^BFI.*open$")  # BFI openness
+
+# UPPS-P
+upps_items <- c("^UPPS.*")  # all UPPS-P items
+upps_lps_items <- c("^UPPS.*lps$")  # UPPS-P Lack of Perservrance
+upps_lpm_items <- c("^UPPS.*lpm$")  # UPPS-P Lack of Premeditation
+upps_pu_items <- c("^UPPS.*pu$")  # UPPS-P Positive Urgency
+upps_nu_items <- c("^UPPS.*nu$")  # UPPS-P Negative Urgency
+```
+
+
+# Compute scores of variables
+```{r}
+combined_dataframe_rescored <- 
+  combined_dataframe %>% 
+  rescore_items(all_items) %>% 
+  select(PID, SONA, matches(all_items))
+```
+
+```{r}
+# Reverse scoring
+combined_dataframe_reversed <- 
+  combined_dataframe_rescored %>% 
+  reverse_score_items_bai(bai_items) %>%  ## BIS_BAS
+  reverse_score_items_nfc(nfc_items) %>%  ## NFC
+  reverse_score_items_bfi(bfi_items) %>%  ## BFI
+  reverse_score_items_upps(upps_items)  ## UPPS-P
+  
+```
+
+
+```{r}
+scale_items <- function(x, na.rm = TRUE){
+  x - mean(x) / sd(x)
+  }
+```
+
+
+```{r}
+ques_items <- c(".*_sum$")
+
+# compute sum of each subscale
+df_ques <- 
+  combined_dataframe_reversed %>% 
+  mutate(BIS_sum = rowSums(select(., matches(bis_items)), na.rm = TRUE),
+         BAS_D_sum = rowSums(select(., matches(bas_d_items)), na.rm = TRUE),
+         BAS_FS_sum = rowSums(select(., matches(bas_fs_items)), na.rm = TRUE),
+         BAS_RR_sum = rowSums(select(., matches(bas_rr_items)), na.rm = TRUE),
+         NFC_sum = rowSums(select(., matches(nfc_items)), na.rm = TRUE),
+         BFI_EXT_sum = rowSums(select(., matches(bfi_ext_items)), na.rm = TRUE),
+         BFI_AGR_sum = rowSums(select(., matches(bfi_agr_items)), na.rm = TRUE),
+         BFI_CON_sum = rowSums(select(., matches(bfi_con_items)), na.rm = TRUE),
+         BFI_NEU_sum = rowSums(select(., matches(bfi_neu_items)), na.rm = TRUE),
+         BFI_OPEN_sum = rowSums(select(., matches(bfi_open_items)), na.rm = TRUE),
+         UPPS_LPS_sum = rowSums(select(., matches(upps_lps_items)), na.rm = TRUE),
+         UPPS_LPM_sum = rowSums(select(., matches(upps_lpm_items)), na.rm = TRUE),
+         UPPS_PU_sum = rowSums(select(., matches(upps_pu_items)), na.rm = TRUE),
+         UPPS_NU_sum = rowSums(select(., matches(upps_nu_items)), na.rm = TRUE)
+         ) %>% 
+  select(PID, SONA, matches(ques_items)) %>% 
+  mutate(across(all_of(matches(ques_items)), ~ scale_items(.), .names ="{.col}_Z"))
+```
+
+
