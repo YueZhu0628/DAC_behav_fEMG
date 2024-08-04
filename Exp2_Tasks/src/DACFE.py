@@ -888,7 +888,7 @@ def offline_rating(data, timepoint, run=RUN):
 
             trial_id = cond_df_rd.loc[valid_trial_num, 'offlineRatingID']
             curr_cue = cond_df_rd.loc[valid_trial_num, 'offlineRatingCue']
-            curr_trial_demand = cond_df_rd.loc[valid_trial_num, 'offlineRatingTrialDemand']
+            curr_trial_demand = cond_df_rd.loc[valid_trial_num, 'offlineRatingCueDemand']
             curr_level = cond_df_rd.loc[valid_trial_num, 'offlineRatingnBackLevel']
 
             CUE = visual.ImageStim(win=WIN, image=f'{cue_path}{curr_cue}')
@@ -988,7 +988,7 @@ def offline_rating(data, timepoint, run=RUN):
                 data.addData('OfflineRatingTimePoint', timepoint)
                 data.addData('OfflineRatingQuesIndex', trial_id)
                 data.addData('CueFigure', curr_cue)
-                data.addData('TrialDemand', curr_trial_demand)
+                data.addData('CueDemand', curr_trial_demand)
                 data.addData('NbackLevel', curr_level)
                 data.addData('OfflineRating', rating)
                 data.addData('OfflineRatingRT', rating_rt)
