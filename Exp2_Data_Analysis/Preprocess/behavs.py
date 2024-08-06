@@ -7,7 +7,7 @@
 # to prepross behavioral data file
 
 
-# In[35]:
+# In[1]:
 
 
 import numpy as np
@@ -16,11 +16,10 @@ from scipy import stats
 import matplotlib.pyplot as plt
 
 
-# In[140]:
+# In[2]:
 
 
 # load data
-# datafile = "E:\Dissertation\Methods\Exp2_Demand_Choice\Analysis\Exp2_data2\\007\Data\\007_task.csv"
 def load(datafile):
     col_names = ["PID","Age","Gender","Phase","Block", "TrialN", "NbackLevel", "ISI", 
                  # Calibration Info
@@ -57,27 +56,28 @@ def load(datafile):
     return df
 
 
-# In[164]:
+# In[32]:
 
 
 # separate phases
 def phases(df):
     def comb_trial_perf(df, phase, cols=["Trial_A_measure","Trial_ACC","Trial_RT"]):
-        df_ct = df.copy().sort_values('TrialN')
+        df_ct = df.copy()
         for col_t in cols:
             col = f'Task{col_t.replace("Trial","")}'
             df_ct[col] = df_ct[col_t].shift(1)
             df_ct_s = df_ct.loc[df_ct['Phase']==phase].sort_values('TrialN')      
         return df_ct_s
     df_indi = df[(df['Phase']=="PRACTICE") & (df['TrialN']==1)].copy()
-    df_learnings = df[df['Phase'].isin(["LEARNING","Learning"])].copy().sort_values('TrialN')
-    df_choices = df[df['Phase'].isin(["TrueCHOICE","FalseCHOICE","Choice"])].copy().sort_values('TrialN')
+    df_learnings = df[df['Phase'].isin(["LEARNING","Learning"])].copy()
+    df_choices = df[df['Phase'].isin(["TrueCHOICE","FalseCHOICE","Choice"])]
     df_learning = comb_trial_perf(df_learnings,"LEARNING")
     df_choice_true = comb_trial_perf(df_choices,"TrueCHOICE")
     df_choice_false = comb_trial_perf(df_choices,"FalseCHOICE")
-    df_offlines = df[df['Phase'] == "OFFLINERATING"].copy().sort_values('TrialN')
-    df_learning_checks = df[df['Phase'] == "LEARNINGCHECK"].copy().sort_values('TrialN')
-    df_demand_ratings = df[df['Phase'] == "DEMANDRATING"].copy().sort_values('TrialN')
+    
+    df_offlines = df[df['Phase'] == "OFFLINERATING"].copy()
+    df_learning_checks = df[df['Phase'] == "LEARNINGCHECK"].copy()
+    df_demand_ratings = df[df['Phase'] == "DEMANDRATING"].copy().sort_values('DemandRatingQuesIndex')
     
     # return a dict of dfs
     df_behavs = {'Individual':df_indi,
@@ -88,16 +88,7 @@ def phases(df):
     return df_behavs
 
 
-# In[165]:
-
-
-# df = load(datafile)
-# df_behavs = phases(df)
-# check_learn(df_behavs)
-# df_behavs['Learning']['Task_RT']
-
-
-# In[6]:
+# In[4]:
 
 
 # check for trial numbers
@@ -113,7 +104,7 @@ def check_trial_n(df_behavs):
         print("Error!", phase, ns)
 
 
-# In[32]:
+# In[5]:
 
 
 # check for whether learned the association
@@ -134,7 +125,7 @@ def check_learn(df_behavs):
         print(pid, "Fail both!")
 
 
-# In[46]:
+# In[6]:
 
 
 # standardize values
@@ -142,11 +133,9 @@ def stand_rt(df_behavs):
     for phase in ['Learning','TrueChoice','FalseChoice']:
         df = df_behavs[phase]
         df['Task_RT_z'] = stats.zscore(df['Task_RT'],nan_policy='omit')
-        df['Task_RT_log'] = np.log(df['Task_RT'])
-        df['Task_RT_log_z'] = stats.zscore(df['Task_RT_log'],nan_policy='omit')
 
 
-# In[47]:
+# In[7]:
 
 
 # standardize values
@@ -164,6 +153,15 @@ def stand_rating(df_behavs):
 
 
 
+
+
+# In[34]:
+
+
+# datafile = "/Users/yolo/Documents/Coding/fEMG/DACFE_45/007/Data/007_task.csv"
+# df = load(datafile)
+# df_behavs = phases(df)
+# df_behavs['FalseChoice']
 
 
 # In[ ]:
