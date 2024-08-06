@@ -147,17 +147,7 @@ failedLearningPIDs
 ```
 
 ```{r}
-# exclude PID 53, due to rating 1-back as harder
-# exclude PID 55, due to mouse malfunction
-# exclude PID 93, due to computer crush.
-# exclude PID 101, due to self-reported learning failure.
-# exclude PID 102, due to self-reported learning failure.
-# include PID 113, due to self-reported learning success (wrong answer by mistake).
-# exclude PID 114, due to extreme offline ratings.
-# exclude PID 115, due to self-reported learning failure.
-# exclude PID 109, due to extreme low accuracy (< 0.5).
-# exclude PID 129, due to extreme offline ratings.
-
+# add the excluded PIDs due performance outliers or other problems
 # excludedPIDs <-
 #   c(failedLearningPIDs, ?)
 
@@ -229,893 +219,244 @@ print(df_Indi$PID[df_Indi$ISI == 2583])
 
 
 
-## Overview of performance distribution
-### Learning Phase
-#### RT
-barplot
+## Performance
 ```{r}
-df_Learning %>% 
+perf_hist_plot <- function(df_clean, indicator){
+  df_clean %>% 
+  filter(Phase %in% c("LEARNING","TrueCHOICE","FalseCHOICE")) %>% 
+  mutate(mean_x = mean(!!sym(indicator), na.rm=TRUE)) %>%
+  ggplot(aes(!!sym(indicator),
+            color = TaskDemand, fill = TaskDemand)) +
+  geom_histogram()+
+  scale_color_lancet()+
+  scale_fill_lancet(alpha = 0.5)+
+  facet_wrap(~TaskDemand)+
+  geom_vline(aes(xintercept=mean_x))+
+  labs(title = indicator, x = indicator)
+}
+```
+
+```{r}
+t_test_within <- function(df_clean, indicator, gb){
+  t_ds <- 
+    df_clean %>% 
+    filter(Phase %in% c("LEARNING","TrueCHOICE","FalseCHOICE")) %>% 
+    group_by(PID) %>% 
+    t_test(!!sym(indicator)~!!sym(gb))
+}
+```
+
+
+```{r}
+perf_bar_plot <- function(df_clean, indicator, gb, demands=TRUE){
+  if(demands == FALSE){
+    df <- 
+      df_clean %>%
+      filter(Phase %in% c("LEARNING","TrueCHOICE","FalseCHOICE")) %>% 
+      group_by(PID) %>%
+      summarise(rt_mean = mean(!!sym(indicator), na.rm=TRUE), .groups = "drop")
+  }else{
+    df <-
+      df_clean %>%
+      filter(Phase %in% c("LEARNING","TrueCHOICE","FalseCHOICE")) %>%
+      group_by(PID, !!sym(gb)) %>%
+      summarise(Perf_mean = mean(!!sym(indicator), na.rm=TRUE), .groups = "drop")
+  }
+  df %>% 
+  mutate(PID = factor(PID)) %>% 
+  ggplot(aes(x=PID, y = Perf_mean,
+            color = !!sym(gb), fill = !!sym(gb))) + 
+  geom_bar(stat = "identity", position = position_dodge(0.9)) + 
+  scale_color_lancet()+
+  scale_fill_lancet(alpha = 0.5)+
+  # stat_pvalue_manual(t_ds, x="PID",y.position = 5,
+  #                    label = "p = {p}{p.adj.signif}", hide.ns = FALSE,
+  #                     tip.length = 0, linetype = "blank") +
+  labs(title = indicator, x = "PID", y = indicator) + 
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+}
+```
+
+```{r}
+perf_box_plot <- function(df_clean, indicator, gb){
+  t_ds_group <-
+    df_clean %>% 
+    filter(Phase %in% c("LEARNING","TrueCHOICE","FalseCHOICE")) %>% 
+    group_by(PID,!!sym(gb)) %>% 
+    summarise(Perf_mean=mean(!!sym(indicator), na.rm=TRUE),.groups = "drop") %>% 
+    mutate(PID = factor(PID),
+           TaskDemand = factor(!!sym(gb))) %>%
+    t_test(Perf_mean~TaskDemand) %>% 
+    add_xy_position(x="TaskDemand") %>% 
+    add_significance()
+  
+  if("p.adj.signif" %in% colnames(t_ds_group)){
+    plabel = "p = {p}{p.adj.signif}"
+  }else{
+    plabel = "p = {p}{p.signif}"
+  }
+  
+  df_clean %>% 
+  filter(Phase %in% c("LEARNING","TrueCHOICE","FalseCHOICE")) %>% 
   # group_by(PID) %>% 
   # summarise(Trial_RT = mean(Trial_RT, na.rm=TRUE), .groups = "drop") %>%
-  group_by(PID, TaskDemand) %>% 
-  summarise(Task_RT = mean(Task_RT, na.rm=TRUE), .groups = "drop") %>%
-  mutate(PID = factor(PID)) %>% 
-  ggplot(data=., aes(x=PID, y = Task_RT,
-            color = TaskDemand, fill = TaskDemand)) + 
-  geom_bar(stat = "identity", position = position_dodge(0.5)) + 
-  scale_color_lancet()+
-  scale_fill_lancet(alpha = 0.5)+
-  labs(title = "Trial RT", x = "PID", y = "Trial RT (s)") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-boxplot
-```{r}
-df_Learning %>%  
-  ggboxplot(data=., x="PID", y = "Task_RT", 
-          color = "TaskDemand", 
-          width = 0.7, dodge = 0) + 
-  scale_color_lancet()+
-  labs(title = "Task RT", x = "PID", y = "Task RT (s)", color = "Task Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-#### ACC
-barplot
-```{r}
-df_Learning %>% 
-  # group_by(PID) %>% 
-  # summarise(Trial_ACC = mean(Trial_ACC, na.rm=TRUE), .groups = "drop") %>%
-  # mutate(PID = factor(PID)) %>% 
-  # ggplot(data=., aes(x=PID, y = Trial_ACC)) + 
-  # geom_bar(stat = "identity", position = position_dodge(0.15)) +
-  group_by(PID, TaskDemand) %>%
-  summarise(Task_ACC = mean(Task_ACC, na.rm=TRUE), .groups = "drop") %>%
-  mutate(PID = factor(PID)) %>%
-  ggplot(data=., aes(x=PID, y = Task_ACC,
-            color = TaskDemand, fill = TaskDemand)) +
-  geom_bar(stat = "identity", position = position_dodge(0.5)) +
-  scale_color_lancet()+
-  scale_fill_lancet(alpha = 0.5)+
-  labs(title = "Task ACC", x = "PID", y = "Task ACC") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-boxplot
-```{r}
-df_Learning %>% 
-  ggboxplot(data=., x="PID", y = "Task_ACC", 
-          color = "TaskDemand", 
-          width = 0.7, dodge = 0) + 
-  scale_color_lancet()+
-  labs(title = "Task ACC", x = "PID", y = "Task ACC", color = "Task Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-#### A measure
-barplot
-```{r}
-df_Learning %>% 
-  # group_by(PID) %>% 
-  # summarise(Task_A_measure = mean(Task_A_measure, na.rm=TRUE), .groups = "drop") %>%
-  # mutate(PID = factor(PID)) %>% 
-  # ggplot(data=., aes(x=PID, y = Task_A_measure)) + 
-  # geom_bar(stat = "identity", position = position_dodge(0.15)) +
-  group_by(PID, TaskDemand) %>%
-  summarise(Task_A_measure = mean(Task_A_measure, na.rm=TRUE), .groups = "drop") %>%
-  mutate(PID = factor(PID)) %>%
-  ggplot(data=., aes(x=PID, y = Task_A_measure,
-            color = TaskDemand, fill = TaskDemand)) +
-  geom_bar(stat = "identity", position = position_dodge(0.5)) +
-  scale_color_lancet()+
-  scale_fill_lancet(alpha = 0.5)+
-  labs(title = "Task_A_measure", x = "PID", y = "Task_A_measure") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-
-### True Choice Phase
-#### RT
-barplot
-```{r}
-df_True_Choice %>% 
-  # group_by(PID) %>% 
+  # group_by(PID, TaskDemand) %>% 
   # summarise(Task_RT = mean(Task_RT, na.rm=TRUE), .groups = "drop") %>%
-  group_by(PID, TaskDemand) %>% 
-  summarise(Task_RT = mean(Task_RT, na.rm=TRUE), .groups = "drop") %>%
-  mutate(PID = factor(PID)) %>% 
-  ggplot(data=., aes(x=PID, y = Task_RT,
-            color = TaskDemand, fill = TaskDemand)) + 
-  geom_bar(stat = "identity", position = position_dodge(0.5)) + 
-  scale_color_lancet()+
-  scale_fill_lancet(alpha = 0.5)+
-  labs(title = "Task RT", x = "PID", y = "Task RT (s)") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-boxplot
-```{r}
-df_True_Choice %>% 
-  ggboxplot(data=., x="PID", y = "Task_RT", 
-          color = "TaskDemand", 
-          width = 0.7, dodge = 0) + 
-  scale_color_lancet()+
-  labs(title = "Task RT", x = "PID", y = "Task RT (s)", color = "Task Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-#### ACC
-barplot
-```{r}
-df_True_Choice %>% 
-  # group_by(PID) %>% 
-  # summarise(Trial_ACC = mean(Trial_ACC, na.rm=TRUE), .groups = "drop") %>%
   # mutate(PID = factor(PID)) %>% 
-  # ggplot(data=., aes(x=PID, y = Trial_ACC)) + 
-  # geom_bar(stat = "identity", position = position_dodge(0.15)) +
-  group_by(PID, TaskDemand) %>%
-  summarise(Task_ACC = mean(Task_ACC, na.rm=TRUE), .groups = "drop") %>%
-  mutate(PID = factor(PID)) %>%
-  ggplot(data=., aes(x=PID, y = Task_ACC,
-            color = TaskDemand, fill = TaskDemand)) +
-  geom_bar(stat = "identity", position = position_dodge(0.5)) +
+  ggplot(aes(x=!!sym(gb), y = !!sym(indicator))) + 
+  geom_boxplot(aes(color = !!sym(gb), fill = !!sym(gb)), 
+               position="identity", outlier.shape = 8) +  
   scale_color_lancet()+
   scale_fill_lancet(alpha = 0.5)+
-  labs(title = "Task ACC", x = "PID", y = "Task ACC") + 
+  stat_pvalue_manual(t_ds_group,
+                     bracket.nudge.y = 0.1,
+                     step.increase = 0.1, 
+                     label = plabel, hide.ns = FALSE,
+                      tip.length = 0.01) +
+  labs(title = indicator, x = gb, y = indicator, fill=gb) + 
   theme_bw() + 
   theme(plot.title = element_text(hjust = 0.5))
+}
 ```
 
-boxplot
+
+### Across Phases (Learning+Choice)
+Histogram Plots
 ```{r}
-df_True_Choice %>% 
-  ggboxplot(data=., x="PID", y = "Task_ACC", 
-          color = "TaskDemand", 
-          width = 0.7, dodge = 0) + 
-  scale_color_lancet()+
-  labs(title = "Task ACC", x = "PID", y = "Task ACC", color = "Task Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
+perf_hist_plot(df_clean, "Task_RT")
+perf_hist_plot(df_clean, "Task_ACC")
+perf_hist_plot(df_clean, "Task_A_measure")
 ```
 
-
-#### A measure
-barplot
+Bar Plots
 ```{r}
-df_True_Choice %>% 
-  # group_by(PID) %>% 
-  # summarise(Trial_A_measure = mean(Trial_A_measure, na.rm=TRUE), .groups = "drop") %>%
-  # mutate(PID = factor(PID)) %>% 
-  # ggplot(data=., aes(x=PID, y = Trial_A_measure)) + 
-  # geom_bar(stat = "identity", position = position_dodge(0.15)) +
-  group_by(PID, TaskDemand) %>%
-  summarise(Task_A_measure = mean(Task_A_measure, na.rm=TRUE), .groups = "drop") %>%
-  mutate(PID = factor(PID)) %>%
-  ggplot(data=., aes(x=PID, y = Task_A_measure,
-            color = TaskDemand, fill = TaskDemand)) +
-  geom_bar(stat = "identity", position = position_dodge(0.5)) +
-  scale_color_lancet()+
-  scale_fill_lancet(alpha = 0.5)+
-  labs(title = "Task_A_measure", x = "PID", y = "Task_A_measure") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
+perf_bar_plot(df_clean,"Task_RT")
+perf_bar_plot(df_clean,"Task_ACC")
+perf_bar_plot(df_clean,"Task_A_measure")
 ```
 
-
-
-### False Choice Phase
-#### RT
-barplot
+Box Plots
 ```{r}
-df_False_Choice %>% 
-  # group_by(PID) %>% 
-  # summarise(Trial_RT = mean(Trial_RT, na.rm=TRUE), .groups = "drop") %>%
-  group_by(PID, ChoiceDemand) %>% 
-  summarise(Task_RT = mean(Task_RT, na.rm=TRUE), .groups = "drop") %>%
-  mutate(PID = factor(PID)) %>% 
-  ggplot(data=., aes(x=PID, y = Task_RT,
-            color = ChoiceDemand, fill = ChoiceDemand)) + 
-  geom_bar(stat = "identity", position = position_dodge(0.5)) + 
-  scale_color_lancet()+
-  scale_fill_lancet(alpha = 0.5)+
-  labs(title = "Task RT", x = "PID", y = "Trial RT (s)") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-boxplot
-```{r}
-df_False_Choice %>% 
-  ggboxplot(data=., x="PID", y = "Task_RT", 
-          color = "ChoiceDemand", 
-          width = 0.7, dodge = 0) + 
-  scale_color_lancet()+
-  labs(title = "Task RT", x = "PID", y = "Task RT (s)", color = "Choice Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
+perf_box_plot(df_clean, "Task_RT", "TaskDemand")
+perf_box_plot(df_clean, "Task_ACC", "TaskDemand")
+perf_box_plot(df_clean, "Task_A_measure", "TaskDemand")
 ```
 
 
-#### ACC
-barplot
-```{r}
-df_False_Choice %>% 
-  # group_by(PID) %>% 
-  # summarise(Trial_ACC = mean(Trial_ACC, na.rm=TRUE), .groups = "drop") %>%
-  # mutate(PID = factor(PID)) %>% 
-  # ggplot(data=., aes(x=PID, y = Trial_ACC)) + 
-  # geom_bar(stat = "identity", position = position_dodge(0.15)) +
-  group_by(PID, ChoiceDemand) %>%
-  summarise(Task_ACC = mean(Task_ACC, na.rm=TRUE), .groups = "drop") %>%
-  mutate(PID = factor(PID)) %>%
-  ggplot(data=., aes(x=PID, y = Task_ACC,
-            color = ChoiceDemand, fill = ChoiceDemand)) +
-  geom_bar(stat = "identity", position = position_dodge(0.5)) +
-  scale_color_lancet()+
-  scale_fill_lancet(alpha = 0.5)+
-  labs(title = "Task ACC", x = "PID", y = "Task ACC") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-boxplot
-```{r}
-df_False_Choice %>% 
-  ggboxplot(data=., x="PID", y = "Task_ACC", 
-          color = "ChoiceDemand", 
-          width = 0.7, dodge = 0) + 
-  scale_color_lancet()+
-  labs(title = "Task ACC", x = "PID", y = "Task ACC", color = "Choice Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-#### A measure
-barplot
-```{r}
-df_False_Choice %>% 
-  # group_by(PID) %>% 
-  # summarise(Task_A_measure = mean(Task_A_measure, na.rm=TRUE), .groups = "drop") %>%
-  # mutate(PID = factor(PID)) %>% 
-  # ggplot(data=., aes(x=PID, y = Task_A_measure)) + 
-  # geom_bar(stat = "identity", position = position_dodge(0.15)) +
-  group_by(PID, ChoiceDemand) %>%
-  summarise(Task_A_measure = mean(Task_A_measure, na.rm=TRUE), .groups = "drop") %>%
-  mutate(PID = factor(PID)) %>%
-  ggplot(data=., aes(x=PID, y = Task_A_measure,
-            color = ChoiceDemand, fill = ChoiceDemand)) +
-  geom_bar(stat = "identity", position = position_dodge(0.5)) +
-  scale_color_lancet()+
-  scale_fill_lancet(alpha = 0.5)+
-  labs(title = "Task_A_measure", x = "PID", y = "Task_A_measure") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-
-
-## Check for Performance Difference between Demands 
-(paired t-test. compare the RT, ACC, A measure in 1-back and 3-back trials)
 ### Learning Phase
-#### RT
-paired by demands within participant
+Bar Plots
 ```{r}
-pw_rt_learning <- 
-  df_Learning %>% 
-  group_by(PID) %>%
-  t_test(Task_RT_log_z ~ TrialDemandLearning_code, paired = TRUE, detailed = TRUE) %>% 
-  add_significance() %>%
-  add_xy_position(x = "TrialDemandLearning_code")
-# table(pw_rt_learning$p.signif)
+perf_bar_plot(df_Learning, "Task_RT")
+perf_bar_plot(df_Learning, "Task_ACC")
+perf_bar_plot(df_Learning, "Task_A_measure")
 ```
 
-
-
-
-paired by demand across participants (means of participants)
+Box Plots
 ```{r}
-df_rt_means_de_v2 <- 
-  df_v2_good_LEARNING %>% 
-  group_by(PID, TaskDemand) %>% 
-  summarise(RTs = mean(Trial_RT, na.rm = TRUE), .groups = "drop")
-
-df_rtz_means_de_v2 <- 
-  df_v2_good_LEARNING %>% 
-  group_by(PID, TaskDemand) %>% 
-  summarise(RTZs = mean(RTZ, na.rm = TRUE), .groups = "drop")
-```
-
-boxplot
-```{r}
-t_rt_v2 <- 
-  df_rt_means_de_v2 %>% 
-  t_test(RTs ~ TaskDemand, 
-         comparisons = list("easy", "hard"),paired = TRUE, detailed = TRUE) %>% 
-  add_xy_position(x = "TaskDemand") %>% 
-  add_significance()
-
-t_rtz_v2 <- 
-  df_rtz_means_de_v2 %>% 
-  t_test(RTZs ~ TaskDemand, paired = TRUE, detailed = TRUE) %>% 
-  add_xy_position(x = "TaskDemand") %>% 
-  add_significance()
-
-ggplot(data = df_rt_means_de_v2, aes(x = TaskDemand, y = RTs, color = TaskDemand)) + 
-  geom_boxplot(width = 0.5, alpha = 0.7) +
-  geom_jitter(width = 0.15) + 
-  stat_boxplot(geom = "errorbar", width = 0.15) +
-  scale_y_continuous(limits = c(0.15, 1.05))+
-  scale_color_lancet()+
-  stat_pvalue_manual(t_rtz_v2, y.position = 0.9,
-                     label = " p = {p}{p.signif} (z-scored)", hide.ns = TRUE) +
-  labs(title = "RT t-test", x = "Task Demand", y = "Trial RT (s)", color = "Task Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-
-#### ACC
-ACCs of Demand levels within each participant
-```{r}
-pw_acc_v2 <- 
-  df_v2_good_LEARNING %>% 
-  group_by(PID) %>% 
-  pairwise_t_test(Trial_ACC ~ TaskDemand, paired = TRUE, detailed = TRUE) %>% 
-  add_significance() %>% 
-  add_xy_position(x = "TaskDemand")
-table(pw_acc_v2$p.adj.signif)
-```
-
-paired by demand across participants (means of participants)
-```{r}
-df_acc_means_de_v2 <- 
-  df_v2_good_LEARNING %>% 
-  group_by(PID, TaskDemand) %>% 
-  summarise(ACCs = mean(Trial_ACC, na.rm = TRUE), .groups = "drop")
-
-df_accz_means_de_v2 <- 
-  df_v2_good_LEARNING %>% 
-  group_by(PID, TaskDemand) %>% 
-  summarise(ACCZs = mean(ACCZ, na.rm = TRUE), .groups = "drop")
-```
-
-boxplot
-```{r}
-t_acc_v2 <- 
-  df_acc_means_de_v2 %>% 
-  t_test(ACCs ~ TaskDemand, paired = TRUE, detailed = TRUE) %>% 
-  add_xy_position(x = "TaskDemand") %>% 
-  add_significance()
-
-t_accz_v2 <- 
-  df_accz_means_de_v2 %>% 
-  t_test(ACCZs ~ TaskDemand, paired = TRUE, detailed = TRUE) %>% 
-  add_xy_position(x = "TaskDemand") %>% 
-  add_significance()
-
-ggplot(data = df_acc_means_de_v2, aes(x = TaskDemand, y = ACCs, color = TaskDemand)) + 
-  geom_boxplot(width = 0.5, alpha = 0.7) +
-  geom_jitter(width = 0.15) + 
-  stat_boxplot(geom = "errorbar", width = 0.15) + 
-  scale_y_continuous(limits = c(0.5, 1.05)) + 
-  scale_color_lancet()+
-  stat_pvalue_manual(t_accz_v2, y.position = 1.02, 
-                     label = "p = {p}{p.signif}", hide.ns = TRUE) + 
-  labs(title = "ACC t-test", x = "Task Demand", y = "Trial ACC", color = "Task Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-#### A measure
-paired by demand across participants (means of participants)
-```{r}
-df_a_means_de_v2 <- 
-  df_v2_good_LEARNING %>% 
-  group_by(PID, TaskDemand) %>% 
-  summarise(A_measures = mean(Trial_A_measure, na.rm = TRUE), .groups = "drop")
-```
-
-boxplot
-```{r}
-t_a_v2 <- 
-  df_a_means_de_v2 %>% 
-  t_test(A_measures ~ TaskDemand, paired = TRUE, detailed = TRUE) %>% 
-  add_xy_position(x = "TaskDemand") %>% 
-  add_significance()
-
-ggplot(data = df_a_means_de_v2, 
-       aes(x = TaskDemand, y = A_measures, color = TaskDemand)) + 
-  geom_boxplot(width = 0.5, alpha = 0.7) +
-  geom_jitter( width = 0.15) + 
-  stat_boxplot(geom = "errorbar", width = 0.15) + 
-  scale_y_continuous(limits = c(0.5, 1.05)) + 
-  scale_color_lancet()+
-  stat_pvalue_manual(t_a_v2, y.position = 1.02, label = "p = {p}{p.signif}", hide.ns = TRUE) + 
-  labs(title = "A_measure t-test", x = "Task Demand", y = "Trial A_measure", color = "Task Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
+perf_box_plot(df_Learning, "Task_RT", "TaskDemand")
+perf_box_plot(df_Learning, "Task_ACC", "TaskDemand")
+perf_box_plot(df_Learning, "Task_A_measure", "TaskDemand")
 ```
 
 
 ### True Choice Phase
-#### RT
+Bar Plots
 ```{r}
-df_rt_means_de_true_choice_v2 <- 
-  df_v2_good_TRUECHOICE %>% 
-  group_by(PID, TaskDemand) %>% 
-  summarise(RTs = mean(Trial_RT, na.rm = TRUE), .groups = "drop")
-
-df_rtz_means_de_true_choice_v2 <- 
-  df_v2_good_TRUECHOICE %>% 
-  group_by(PID, TaskDemand) %>% 
-  summarise(RTZs = mean(RTZ, na.rm = TRUE), .groups = "drop")
+perf_bar_plot(df_True_Choice, "Task_RT")
+perf_bar_plot(df_True_Choice, "Task_ACC")
+perf_bar_plot(df_True_Choice, "Task_A_measure")
 ```
 
-boxplot
+Box Plots
 ```{r}
-t_rt_true_choice_v2 <- 
-  df_rt_means_de_true_choice_v2 %>% 
-  t_test(RTs ~ TaskDemand, comparisons = list("easy", "hard"), paired = FALSE, detailed = TRUE) %>% 
-  add_xy_position(x = "TaskDemand") %>% 
-  add_significance()
-
-t_rtz_true_choice_v2 <- 
-  df_rtz_means_de_true_choice_v2 %>% 
-  t_test(RTZs ~ TaskDemand,paired = FALSE, detailed = TRUE) %>% 
-  add_xy_position(x = "TaskDemand") %>% 
-  add_significance()
-
-ggplot(data = df_rt_means_de_true_choice_v2, aes(x = TaskDemand, y = RTs, color = TaskDemand)) + 
-  geom_boxplot(width = 0.5, alpha = 0.7) +
-  geom_jitter(width = 0.15, alpha = 0.7) + 
-  stat_boxplot(geom = "errorbar", width = 0.15) +
-  scale_y_continuous(limits = c(0.15, 1.05))+
-  scale_color_lancet()+
-  stat_pvalue_manual(t_rtz_true_choice_v2, y.position = 0.9,
-                     label = " p = {p}{p.signif} (z-scored)", hide.ns = FALSE) +
-  labs(title = "RT t-test", x = "Task Demand", y = "Trial RT (s)", color = "Task Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-#### ACC
-```{r}
-df_acc_means_de_true_choice_v2 <- 
-  df_v2_good_TRUECHOICE %>% 
-  group_by(PID, TaskDemand) %>% 
-  summarise(ACCs = mean(Trial_ACC, na.rm = TRUE), .groups = "drop")
-
-df_accz_means_de_true_choice_v2 <- 
-  df_v2_good_TRUECHOICE %>% 
-  group_by(PID, TaskDemand) %>% 
-  summarise(ACCZs = mean(ACCZ, na.rm = TRUE), .groups = "drop")
-```
-
-boxplot
-```{r}
-t_acc_true_choice_v2 <- 
-  df_acc_means_de_true_choice_v2 %>% 
-  t_test(ACCs ~ TaskDemand, paired = FALSE, detailed = TRUE) %>% 
-  add_xy_position(x = "TaskDemand") %>% 
-  add_significance()
-
-t_accz_true_choice_v2 <- 
-  df_accz_means_de_true_choice_v2 %>% 
-  t_test(ACCZs ~ TaskDemand, paired = FALSE, detailed = TRUE) %>% 
-  add_xy_position(x = "TaskDemand") %>% 
-  add_significance()
-
-ggplot(data = df_acc_means_de_true_choice_v2, aes(x = TaskDemand, y = ACCs, color = TaskDemand)) + 
-  geom_boxplot(width = 0.5, alpha = 0.7) +
-  geom_jitter(width = 0.15, alpha = 0.7) + 
-  stat_boxplot(geom = "errorbar", width = 0.15) + 
-  scale_y_continuous(limits = c(0.5, 1.05)) + 
-  scale_color_lancet()+
-  stat_pvalue_manual(t_accz_true_choice_v2, y.position = 1.02, 
-                     label = "p = {p}{p.signif}", hide.ns = FALSE) + 
-  labs(title = "ACC t-test", x = "Task Demand", y = "Trial ACC", color = "Task Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-#### A measure
-```{r}
-df_a_means_de_true_choice_v2 <- 
-  df_v2_good_TRUECHOICE %>% 
-  group_by(PID, TaskDemand) %>% 
-  summarise(A_measures = mean(Trial_A_measure, na.rm = TRUE), .groups = "drop")
-```
-
-boxplot
-```{r}
-t_a_true_choice_v2 <- 
-  df_a_means_de_true_choice_v2 %>% 
-  t_test(A_measures ~ TaskDemand, paired = FALSE, detailed = TRUE) %>% 
-  add_xy_position(x = "TaskDemand") %>% 
-  add_significance()
-
-ggplot(data = df_a_means_de_true_choice_v2, aes(x = TaskDemand, y = A_measures, color = TaskDemand)) + 
-  geom_boxplot(width = 0.5, alpha = 0.7) +
-  geom_jitter( width = 0.15, alpha = 0.7) + 
-  stat_boxplot(geom = "errorbar", width = 0.15) + 
-  scale_y_continuous(limits = c(0.5, 1.05)) + 
-  scale_color_lancet()+
-  stat_pvalue_manual(t_a_true_choice_v2, y.position = 1.02, label = "p = {p}{p.signif}", hide.ns = FALSE) + 
-  labs(title = "A_measure t-test", x = "Task Demand", y = "Trial A_measure", color = "Task Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
+perf_box_plot(df_True_Choice, "Task_RT", "TaskDemand")
+perf_box_plot(df_True_Choice, "Task_ACC", "TaskDemand")
+perf_box_plot(df_True_Choice, "Task_A_measure", "TaskDemand")
 ```
 
 
 ### False Choice Phase
-#### RT
+Bar Plots
 ```{r}
-df_rt_means_de_false_choice_v2 <- 
-  df_v2_good_FALSECHOICE %>% 
-  group_by(PID, ChoiceDemand) %>% 
-  summarise(RTs = mean(Trial_RT, na.rm = TRUE), .groups = "drop")
-
-df_rtz_means_de_false_choice_v2 <- 
-  df_v2_good_FALSECHOICE %>% 
-  group_by(PID, ChoiceDemand) %>% 
-  summarise(RTZs = mean(RTZ, na.rm = TRUE), .groups = "drop")
+perf_bar_plot(df_False_Choice, "Task_RT", "ChoiceDemand")
+perf_bar_plot(df_False_Choice, "Task_ACC", "ChoiceDemand")
+perf_bar_plot(df_False_Choice, "Task_A_measure", "ChoiceDemand")
 ```
 
-boxplot
+Box Plots
 ```{r}
-t_rt_false_choice_v2 <- 
-  df_rt_means_de_false_choice_v2 %>% 
-  t_test(RTs ~ ChoiceDemand, comparisons = list("easy", "hard"), paired = FALSE, detailed = TRUE) %>% 
-  add_xy_position(x = "ChoiceDemand") %>% 
-  add_significance()
-
-t_rtz_false_choice_v2 <- 
-  df_rtz_means_de_false_choice_v2 %>% 
-  t_test(RTZs ~ ChoiceDemand,paired = FALSE, detailed = TRUE) %>% 
-  add_xy_position(x = "ChoiceDemand") %>% 
-  add_significance()
-
-ggplot(data = df_rt_means_de_false_choice_v2, aes(x = ChoiceDemand, y = RTs, color = ChoiceDemand)) + 
-  geom_boxplot(width = 0.5, alpha = 0.7) +
-  geom_jitter(width = 0.15, alpha = 0.7) + 
-  stat_boxplot(geom = "errorbar", width = 0.15) +
-  scale_y_continuous(limits = c(0.15, 1.05))+
-  scale_color_lancet()+
-  stat_pvalue_manual(t_rtz_false_choice_v2, y.position = 0.9,
-                     label = " p = {p}{p.signif} (z-scored)", hide.ns = FALSE) +
-  labs(title = "RT t-test", x = "Choice Demand", y = "Trial RT (s)", color = "Choice Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
+perf_box_plot(df_False_Choice, "Task_RT", "ChoiceDemand")
+perf_box_plot(df_False_Choice, "Task_ACC", "ChoiceDemand")
+perf_box_plot(df_False_Choice, "Task_A_measure", "ChoiceDemand")
 ```
-
-
-#### ACC
-```{r}
-df_acc_means_de_false_choice_v2 <- 
-  df_v2_good_FALSECHOICE %>% 
-  group_by(PID, ChoiceDemand) %>% 
-  summarise(ACCs = mean(Trial_ACC, na.rm = TRUE), .groups = "drop")
-
-df_accz_means_de_false_choice_v2 <- 
-  df_v2_good_FALSECHOICE %>% 
-  group_by(PID, ChoiceDemand) %>% 
-  summarise(ACCZs = mean(ACCZ, na.rm = TRUE), .groups = "drop")
-```
-
-boxplot
-```{r}
-t_acc_false_choice_v2 <- 
-  df_acc_means_de_false_choice_v2 %>% 
-  t_test(ACCs ~ ChoiceDemand, paired = FALSE, detailed = TRUE) %>% 
-  add_xy_position(x = "ChoiceDemand") %>% 
-  add_significance()
-
-t_accz_false_choice_v2 <- 
-  df_accz_means_de_false_choice_v2 %>% 
-  t_test(ACCZs ~ ChoiceDemand, paired = FALSE, detailed = TRUE) %>% 
-  add_xy_position(x = "ChoiceDemand") %>% 
-  add_significance()
-
-ggplot(data = df_acc_means_de_false_choice_v2, aes(x = ChoiceDemand, y = ACCs, color = ChoiceDemand)) + 
-  geom_boxplot(width = 0.5, alpha = 0.7) +
-  geom_jitter(width = 0.15, alpha = 0.7) + 
-  stat_boxplot(geom = "errorbar", width = 0.15) + 
-  scale_y_continuous(limits = c(0.5, 1.05)) + 
-  scale_color_lancet()+
-  stat_pvalue_manual(t_accz_false_choice_v2, y.position = 1.02, 
-                     label = "p = {p}{p.signif}", hide.ns = FALSE) + 
-  labs(title = "ACC t-test", x = "Choice Demand", y = "Trial ACC", color = "Choice Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-#### A measure
-```{r}
-df_a_means_de_false_choice_v2 <- 
-  df_v2_good_FALSECHOICE %>% 
-  group_by(PID, ChoiceDemand) %>% 
-  summarise(A_measures = mean(Trial_A_measure, na.rm = TRUE), .groups = "drop")
-```
-
-boxplot
-```{r}
-t_a_false_choice_v2 <- 
-  df_a_means_de_false_choice_v2 %>% 
-  t_test(A_measures ~ ChoiceDemand, paired = FALSE, detailed = TRUE) %>% 
-  add_xy_position(x = "ChoiceDemand") %>% 
-  add_significance()
-
-ggplot(data = df_a_means_de_false_choice_v2, aes(x = ChoiceDemand, y = A_measures, color = ChoiceDemand)) + 
-  geom_boxplot(width = 0.5, alpha = 0.7) +
-  geom_jitter( width = 0.15, alpha = 0.7) + 
-  stat_boxplot(geom = "errorbar", width = 0.15) + 
-  scale_y_continuous(limits = c(0.5, 1.05)) + 
-  scale_color_lancet()+
-  stat_pvalue_manual(t_a_false_choice_v2, y.position = 1.02, label = "p = {p}{p.signif}", hide.ns = FALSE) + 
-  labs(title = "A_measure t-test", x = "Choice Demand", y = "Trial A_measure", color = "Choice Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-
-
-### Choice RT
-```{r}
-df_v2_good_FALSECHOICE_remove_outliers <- 
-  df_v2_good_FALSECHOICE %>%
-  group_by(PID) %>% 
-  dplyr::filter(abs(scale(ChoiceRT)) <= 2.5) %>% 
-  ungroup()
-```
-
-
-```{r}
-df_v2_good_FALSECHOICE_remove_outliers %>%  
-  ggboxplot(data=., x="PID", y = "ChoiceRT", 
-          color = "ChoiceDemand",
-          width = 0.7, dodge = 0) + 
-  scale_color_lancet()+
-  labs(title = "Trial RT", x = "PID", y = "Trial RT (s)", color = "Task Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-boxplot
-```{r}
-df_v2_good_FALSECHOICE %>%  
-  ggboxplot(data=., x="PID", y = "ChoiceRT", 
-          color = "ChoiceDemand",
-          width = 0.7, dodge = 0) + 
-  scale_color_lancet()+
-  labs(title = "Trial RT", x = "PID", y = "Trial RT (s)", color = "Task Demand") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-
-## Check for Performance Difference between Transitions
-compare the RT, ACC and A measure in repetition and switch trials
-### Learning Phase
-#### Rt
-paired by transition within each participant
-```{r}
-pw_rt_v2 <- 
-  df_v2_good_LEARNING %>% 
-  filter(! is.na(TrialTransition)) %>% 
-  group_by(PID) %>% 
-  t_test(Trial_RT ~ TrialTransition, paired = FALSE, detailed = TRUE) %>% 
-  add_significance() %>% 
-  add_xy_position(x = "TrialTransition")
-table(pw_rt_v2$p.signif)
-```
-
-paired by transition across participants (means of participants)
-```{r}
-df_rt_means_tr_v2 <- 
-  df_v2_good_LEARNING %>% 
-  filter(! is.na(TrialTransition)) %>% 
-  group_by(PID, TrialTransition) %>% 
-  summarise(RTs = mean(Trial_RT, na.rm = TRUE), .groups = "drop")
-
-df_rtz_means_tr_v2 <- 
-  df_v2_good_LEARNING %>% 
-  filter(! is.na(TrialTransition)) %>% 
-  group_by(PID, TrialTransition) %>% 
-  summarise(RTZs = mean(RTZ, na.rm = TRUE), .groups = "drop")
-```
-
-boxplot
-```{r}
-t_rt_v2 <- 
-  df_rt_means_tr_v2 %>% 
-  t_test(RTs ~ TrialTransition, paired = TRUE, detailed = TRUE) %>% 
-  add_xy_position(x = "TrialTransition") %>% 
-  add_significance()
-
-t_rtz_v2 <- 
-  df_rtz_means_tr_v2 %>% 
-  t_test(RTZs ~ TrialTransition, paired = TRUE, detailed = TRUE) %>% 
-  add_xy_position(x = "TrialTransition") %>% 
-  add_significance()
-
-ggplot(data = df_rt_means_tr_v2, aes(x = TrialTransition, y = RTs, color = TrialTransition)) + 
-  geom_boxplot(width = 0.5, alpha = 0.7) +
-  geom_jitter(width = 0.15) + 
-  scale_color_jco()+
-  stat_boxplot(geom = "errorbar", width = 0.15) + 
-  stat_pvalue_manual(t_rtz_v2, y.position = 0.75,
-                     label = "{p.signif} (z-scored)", hide.ns = FALSE) +
-  # stat_pvalue_manual(t_rt, label = " p.signif", hide.ns = TRUE) +
-  scale_y_continuous(limits = c(0.15, 1.05)) + 
-  labs(title = "RT t-test", x = "Trial Transition", y = "Trial RT", color = "Trial Transition") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
-#### ACC 
-paired by transition within each participant
-```{r}
-pw_acc_v2 <- 
-  df_v2_good_LEARNING %>% 
-  filter(! is.na(TrialTransition)) %>% 
-  group_by(PID) %>% 
-  t_test(Trial_ACC ~ TrialTransition, paired = FALSE, detailed = TRUE) %>% 
-  add_significance() %>% 
-  add_xy_position(x = "TrialTransition")
-table(pw_acc_v2$p.signif)
-```
-
-paired by transition across participants (means of participants)
-```{r}
-df_acc_means_tr_v2 <- 
-  df_v2_good_LEARNING %>% 
-  filter(! is.na(TrialTransition)) %>% 
-  group_by(PID, TrialTransition) %>% 
-  summarise(ACCs = mean(Trial_ACC, na.rm = TRUE), .groups = "drop")
-```
-
-boxplot
-```{r}
-t_acc_v2 <- 
-  df_acc_means_tr_v2 %>% 
-  t_test(ACCs ~ TrialTransition, paired = TRUE, detailed = TRUE) %>% 
-  add_xy_position(x = "TrialTransition") %>% 
-  add_significance()
-
-ggplot(data = df_acc_means_tr_v2, 
-       aes(x = TrialTransition, y = ACCs, color = TrialTransition)) +  #, label=PID
-  geom_boxplot(width = 0.5, alpha = 0.7) +
-  geom_jitter(width = 0.15) + 
-  scale_color_jco()+
-  # geom_label_repel(aes(color=TrialTransition), 
-  #                  max.overlaps = nrow(df_acc_means_tr_v2)) +
-  stat_boxplot(geom = "errorbar", width = 0.15) + 
-  stat_pvalue_manual(t_acc_v2, y.position = 0.99,
-                     label = "{p.signif}", hide.ns = FALSE) + 
-  scale_y_continuous(limits = c(0.5, 1.05)) + 
-  labs(title = "ACC t-test", x = "Trial Transition", y = "Trial ACC", color = "Trial Transition") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-# excluded PID 109 ACC < 0.5
-```
-
-
-#### A measure
-paired by transition across participants (means of participants)
-```{r}
-df_a_means_tr_v2 <- 
-  df_v2_good_LEARNING %>% 
-  filter(! is.na(TrialTransition)) %>% 
-  group_by(PID, TrialTransition) %>% 
-  summarise(A_measures = mean(Trial_A_measure, na.rm = TRUE), .groups = "drop")
-```
-
-boxplot
-```{r}
-t_a_v2 <- 
-  df_a_means_tr_v2 %>% 
-  t_test(A_measures ~ TrialTransition, paired = TRUE, detailed = TRUE) %>% 
-  add_xy_position(x = "Trial_Transition") %>% 
-  add_significance()
-
-ggplot(data = df_a_means_tr_v2, aes(x = TrialTransition, y = A_measures, color = TrialTransition)) + 
-  geom_boxplot(width = 0.5, alpha = 0.7) +
-  geom_jitter(width = 0.15) + 
-  scale_color_jco()+
-  stat_boxplot(geom = "errorbar", width = 0.15) + 
-  stat_pvalue_manual(t_a_v2, xmin = "group1", xmax = "group2",
-                     y.position = 0.98,
-                     label = "{p.signif}", hide.ns = FALSE) + 
-  scale_y_continuous(limits = c(0.5, 1.05)) + 
-  labs(title = "A_measure t-test", x = "Trial Transition", y = "Trial A_measure", color = "Trial Transition") + 
-  theme_bw() + 
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-
 
 
 
 ## Check for DemandRatings (Demand-Manipulation Check)
 ```{r}
-df_dr_means_de_v2 <- 
-  df_v2_DEMANDRATING %>% 
-  filter(!PID %in% excludedPIDs_v2) %>% 
-  group_by(PID, DemandCheck) %>% 
-  summarise(DR_aves = mean(DemandRating, na.rm=TRUE),
-            DR_aveZs = mean(DemandRatingZ, na.rm=TRUE),
-            .groups = "drop")
+df_dr_means_de <- 
+  df_DemandRating %>% 
+  group_by(PID, DemandLevel) %>% 
+  summarise(DemandRating = mean(DemandRating, na.rm=TRUE),
+            DemandRating_z = mean(DemandRating_z, na.rm=TRUE),
+            .groups = "drop") %>% 
+  mutate(DemandLevel=factor(DemandLevel))
 
-t_dr_v2 <- 
-  df_dr_means_de_v2 %>% 
-  t_test(DR_aveZs ~ DemandCheck, paired = TRUE, detailed = TRUE) %>% 
-  add_xy_position(x = "DemandCheck") %>% 
+t_dr <- 
+  df_dr_means_de %>% 
+  t_test(DemandRating_z ~ DemandLevel, paired = TRUE, detailed = TRUE) %>% 
+  add_xy_position(x = "DemandLevel") %>% 
   add_significance()
 ```
 
 boxplot
 (higher rating = rated as more demanding)
 ```{r}
-ggplot(data = df_dr_means_de_v2, aes(x = DemandCheck, y = DR_aves, color = DemandCheck)) + 
+ggplot(data = df_dr_means_de, aes(x = DemandLevel, y = DemandRating_z, 
+                                  color = DemandLevel)) + 
   geom_boxplot(width = 0.5, alpha = 0.7) +
   geom_jitter() + 
-  stat_boxplot(geom = "errorbar", width = 0.15) + 
-  stat_pvalue_manual(t_dr_v2, y = 105, step.increase = 0.2,
-                     label = "p = {p}{p.adj.signif}", hide.ns = TRUE) + 
+  stat_boxplot(geom = "errorbar", width = 0.15) +
+  stat_pvalue_manual(t_dr, step.increase = 0.2, bracket.nudge.y = 0.1,
+                     label = "p = {p}{p.adj.signif}", hide.ns = TRUE) +
   scale_color_manual(labels=c("1-Back", "2-Back", "3-Back"),
-                     values = c("#00468BFF", "#42B540FF", "#ED0000FF")) + 
-  scale_x_discrete(labels = c("1-Back", "2-Back", "3-Back")) + 
-  labs(title = "DemandRating t-test", x = "TrialDemand", y = "DemandRating_ave", 
-       color = "DemandCheck") + 
+                     values = c("#00468BFF", "#42B540FF", "#ED0000FF")) +
+  scale_x_discrete(labels = c("1-Back", "2-Back", "3-Back")) +
+  labs(title = "Demand Rating t-test", x = "Task Demand", y = "Demand Rating_z", 
+       color = "Demand Level") + 
   theme_bw() + 
   theme(plot.title = element_text(hjust = 0.5))
 ```
+
 
 
 The participant should be excluded due to rating 1-back as harder?
 ```{r}
-df_dr_means_de_diff_v2 <- 
-  df_dr_means_de_v2 %>% 
-  select(-DR_aves) %>% 
-  pivot_wider(names_from = DemandCheck, names_prefix = "DR_aveZs_" ,values_from = DR_aveZs) %>% 
+df_dr_means_de_diff <- 
+  df_dr_means_de %>% 
+  select(-DemandRating) %>% 
+  pivot_wider(names_from = DemandLevel, 
+              names_prefix = "DemandRating_z_" ,values_from = DemandRating_z) %>% 
   group_by(PID) %>% 
-  mutate(DR_aveZs_diff = DR_aveZs_hard -DR_aveZs_easy) %>% 
+  mutate(DemandRating_z_diff = DemandRating_z_3 -DemandRating_z_1) %>% 
   ungroup() %>% 
-  mutate(DemandCheckType = ifelse(DR_aveZs_diff > 0, "3_as_harder", "1_as_harder")) 
+  mutate(DemandCheckType = ifelse(DemandRating_z_diff > 0, "3_as_harder", "1_as_harder")) 
 
-# ggplot(data = df_dr_means_de_diff, aes(x="", y = DR_aveZs_diff, color=DemandCheckType, label=PID)) +
-ggplot(data = df_dr_means_de_diff_v2, aes(x="", y = DR_aveZs_diff, color=DemandCheckType)) +
+ggplot(data = df_dr_means_de_diff, aes(x="", y = DemandRating_z_diff, color=DemandCheckType, label=PID)) +
+# ggplot(data = df_dr_means_de_diff, aes(x="", y = DemandRating_z_diff, color=DemandCheckType)) +
   geom_boxplot(position="identity", width = 0.2, alpha = 0.9) +
   geom_jitter(width = 0.2) + 
-  # geom_label_repel(aes(color=DemandCheckType), max.overlaps = nrow(df_dr_means_de_diff)) + 
+  geom_label_repel(aes(color=DemandCheckType), max.overlaps = nrow(df_dr_means_de_diff)) +
   scale_color_d3()+
-  labs(title = "DemandRating_diff (hard-easy)", x = "", y = "DemandRating_aveZ_diff") + 
+  labs(title = "DemandRating_diff (hard-easy)", x = "", y = "DemandRating_Z_diff") + 
   theme_bw() + 
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
+```{r}
+# PID 10, 41, 45 rated 3-back as harder
+```
 
 
 
@@ -1139,6 +480,7 @@ separate distributions of different demands
 zyg
 ```{r}
 df_Learning %>% 
+  # filter(TrialN %in% c(41:50)) %>%
   group_by(PID, TaskDemand) %>% 
   summarise(zyg_z = mean(cue_i_on_zyg_zvalues, na.rm = TRUE), .groups = "drop") %>% 
   ggplot(aes(x = zyg_z, color  = TaskDemand, fill = TaskDemand)) +
@@ -1156,10 +498,11 @@ df_Learning %>%
 cor
 ```{r}
 df_Learning %>% 
+  # filter(TrialN %in% c(41:50)) %>% 
   group_by(PID, TaskDemand) %>% 
   summarise(cor_z = mean(cue_i_on_cor_zvalues, na.rm = TRUE), .groups = "drop") %>% 
   ggplot(aes(x = cor_z, color  = TaskDemand, fill = TaskDemand)) +
-  geom_histogram(position = position_dodge(width = 0.25), bins = 10, alpha = 0.7)+
+  geom_histogram(position = position_dodge(width = 0.4), bins = 10, alpha = 0.7)+
   # scale_x_continuous(breaks = seq(-5, 5)) +
   scale_color_lancet() + 
   scale_fill_lancet() + 
@@ -1643,12 +986,17 @@ ggplot(data = df_grandmeans_by_trial_v2, aes(x = TrialN, y = OnlineRatingZ, grou
 
 #### Difference in each 10 trials 
 ```{r}
+# function of plot means of each 10 trials
+```
+
+
+```{r}
 # review the number of easy and hard trials in each trial section
 # it turns out to be relatively balanced
 
 result_table <- 
-  df_v2_good_LEARNING %>%
-  mutate(Trial_Index_Group = cut(TrialIndex, breaks = c(1, 10, 20, 30, 40, 50), labels = FALSE)) %>%
+  df_Learning %>%
+  mutate(Trial_Index_Group = cut(TrialN, breaks = c(1, 10, 20, 30, 40, 50), labels = FALSE)) %>%
   group_by(PID, Trial_Index_Group, TaskDemand) %>%
   summarise(count = n(), .groups = "drop") %>%
   pivot_wider(names_from = TaskDemand, values_from = count, values_fill = 0)
@@ -1665,7 +1013,7 @@ calculate_section_means <- function(data, col_reps, section) {
     group_by(PID, TaskDemand) %>%
     summarise(across(starts_with(col_reps),
                      ~ mean(.[TrialN %in% section], na.rm = TRUE),
-                     .names = "OnlineRatingZ_mean"), .groups = "drop")
+                     .names = "femg_z_mean"), .groups = "drop")
 }
 
 # Define the sections
@@ -1684,7 +1032,7 @@ result_list <- lapply(names(trial_sections), function(section_name) {
   section <- trial_sections[[section_name]]
   
   # Calculate means for the current section
-  result <- calculate_section_means(df_v2_good_LEARNING, "OnlineRatingZ", section)
+  result <- calculate_section_means(df_Learning, "cue_i_on_cor_zvalues", section)
   
   # Add a column indicating the section name
   result$Section <- section_name
@@ -1693,27 +1041,27 @@ result_list <- lapply(names(trial_sections), function(section_name) {
 })
 
 # Combine the results into a single data frame
-df_ra_means_demands_tsecs_v2 <- bind_rows(result_list)
+df_femg_means_demands_tsecs <- bind_rows(result_list)
 
-df_ra_grandmeans_demands_tsecs_v2 <-
-  df_ra_means_demands_tsecs_v2 %>% 
+df_femg_grandmeans_demands_tsecs <-
+  df_femg_means_demands_tsecs %>% 
   group_by(Section, TaskDemand) %>% 
-  summarise(OnlineRatingZ_gmean = mean(OnlineRatingZ_mean, na.rm = TRUE), .groups = "drop") 
+  summarise(femg_z_gmean = mean(femg_z_mean, na.rm = TRUE), .groups = "drop") 
 ```
 
 ```{r}
-t_ra_set_v2 <- 
-  df_ra_means_demands_tsecs_v2 %>% 
+t_femg_set <- 
+  df_femg_means_demands_tsecs %>% 
   group_by(Section) %>% 
-  t_test(OnlineRatingZ_mean ~ TaskDemand, paired = TRUE, detailed = TRUE) %>% 
+  t_test(femg_z_mean ~ TaskDemand, paired = TRUE, detailed = TRUE) %>% 
   add_significance() %>% 
   add_xy_position(x = "Section")
 ```
 
 boxplots
 ```{r}
-df_ra_means_demands_tsecs_v2 %>% 
-  ggplot(aes(x = Section, y = OnlineRatingZ_mean,color = TaskDemand)) + 
+df_femg_means_demands_tsecs %>% 
+  ggplot(aes(x = Section, y = femg_z_mean,color = TaskDemand)) + 
   geom_boxplot(position = "dodge2", 
                alpha = 0.7, width = 0.5, outlier.color = "black") +
   geom_point(position = position_dodge(width = 0.5), alpha = 0.5) +
@@ -1721,7 +1069,7 @@ df_ra_means_demands_tsecs_v2 %>%
   # scale_fill_lancet() +
   # stat_summary(fun = mean, geom = "point", shape = 17, color = "black", size = 2) +
   # stat_compare_means(label = "p.signif", paired = TRUE, hide.ns = FALSE, label.y = 2.2) + 
-  stat_pvalue_manual(t_ra_set_v2, label = "p = {p}{p.signif}", hide.ns = FALSE,
+  stat_pvalue_manual(t_femg_set, label = "p = {p}{p.signif}", hide.ns = FALSE,
                       tip.length = 0, linetype = "blank") +
   labs(title = "OnlineRating t-test by Section", x = "Task Demand", y = "Rating(z-scored)", 
        color = "TaskDemand") + 
@@ -4727,6 +4075,16 @@ summary(reg.med2_v2)
 
 
 ### Exporatory Analysis
+#### Choice RT
+```{r}
+df_False_Choice_RT_outliers <- 
+  df_False_Choice %>%
+  group_by(PID) %>% 
+  filter(abs(scale(ChoiceRT)) >= 2.5) %>% 
+  # ungroup() %>%
+  summarise(ChoiceRT=mean(ChoiceRT, na.rm=TRUE), .groups = "drop")
+```
+
 #### Trial Performance ~ Online Rating
 ```{r}
 reg.m4.1_lmerTest_v2 <- 
