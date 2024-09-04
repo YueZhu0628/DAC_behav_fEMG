@@ -9,7 +9,7 @@ class Mean(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.dimensions = {'time': 1}
         
     def algorithm(self, signal):
         signal_values = signal.p.get_values()
